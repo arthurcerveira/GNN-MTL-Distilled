@@ -1,0 +1,10 @@
+chemprop/*.egg-info
+__pycache__/
+***/__pycache__/
+*.ckpt
+*.pt
+chemprop/docs/
+chemprop/tests/
+chemprop/examples/
+chemprop/lightning_logs/
+data/Full-ExCAPE.tsv
