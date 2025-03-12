@@ -17,7 +17,7 @@ from tqdm import tqdm
 from chemprop import data, featurizers, models, nn, conf
 
 
-TRAIN_TARGET_SPECIFIC = True
+TRAIN_TARGET_SPECIFIC = False
 TRAIN_ALL_MULTI_TARGET = True
 RETRAIN = True
 
@@ -180,8 +180,8 @@ def train_multi_target(targets):
     ffn = nn.RegressionFFN(
         output_transform=output_transform, n_tasks=len(targets), criterion=MaskedMSE()
     )
-    ffn._T_default_criterion = MaskedMSE()
-    ffn._T_default_metric = MaskedMSE()
+    # ffn._T_default_criterion = MaskedMSE()
+    # ffn._T_default_metric = MaskedMSE()
 
     batch_norm = True
     metric_list = [MaskedMSE()]  # Only the first metric is used for training and early stopping
@@ -209,6 +209,12 @@ def train_multi_target(targets):
 
     trainer.fit(mpnn, train_loader, val_loader)
     results = trainer.test(dataloaders=test_loader)
+
+    # Save index-to-target mapping to checkpoint directory for later use
+    index_to_target = {i: target for i, target in enumerate(targets)}
+    with open(f"../checkpoints/multi-target/MT-ALL/index_to_target.json", "w") as f:
+        json.dump(index_to_target, f, indent=4, ensure_ascii=False)
+
     return results
 
 
