@@ -13,3 +13,4 @@ SEA/*
 !SEA/*.ipynb
 *.pkl
 checkpoints/***/*.json
+lo_intermediate*

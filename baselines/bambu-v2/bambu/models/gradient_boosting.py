@@ -1,20 +1,35 @@
 from flaml.model import SKLearnEstimator
 from flaml import tune
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
 import numpy as np
 import time
 
 class GradientBoostingEstimator(SKLearnEstimator):
-    """The class for tuning a Tree-based Gradient Boosting Classifier"""
+    """The class for tuning a Tree-based Gradient Boosting Classifier or Regressor"""
 
     @classmethod
     def search_space(cls, data_size, **params):
-       
-        search_space = {
-            "loss": {
-                "domain": tune.choice(["deviance", "exponential"]),
-                "init_value": "deviance"
-            },
+        task = params.get("task", "classification")  # Default to classification
+
+        if task == "classification":
+            search_space = {
+                "loss": {
+                    "domain": tune.choice(["log_loss", "exponential"]),
+                    "init_value": "log_loss"
+                }
+            }
+        elif task == "regression":
+            search_space = {
+                "loss": {
+                    "domain": tune.choice(["squared_error", "absolute_error", "huber", "quantile"]),
+                    "init_value": "squared_error"
+                }
+            }
+        else:
+            raise ValueError(f"Invalid task type: {task}. Choose 'classification' or 'regression'.")
+
+        # Common hyperparameters for both tasks
+        common_params = {
             "learning_rate": {
                 "domain": tune.uniform(lower=1e-5, upper=1 - 1e-5),
                 "init_value": 1e-5
@@ -44,7 +59,7 @@ class GradientBoostingEstimator(SKLearnEstimator):
                 "init_value": 1e-5
             },
             "max_features": {
-                "domain": tune.choice([None, "auto", "sqrt", "log2"]),
+                "domain": tune.choice([None, "sqrt", "log2"]) if task == "regression" else tune.choice([None, "auto", "sqrt", "log2"]),
                 "init_value": None                
             },
             "max_leaf_nodes": {
@@ -60,8 +75,11 @@ class GradientBoostingEstimator(SKLearnEstimator):
                 "init_value": 1e-5                   
             }
         }
-        
-        cls._hyperameters = search_space.keys()
+
+        # Merge common parameters into the search space
+        search_space.update(common_params)
+
+        cls._hyperparameters = search_space.keys()
         return search_space
 
     @classmethod
@@ -82,9 +100,12 @@ class GradientBoostingEstimator(SKLearnEstimator):
     def fit(self, X_train, y_train, budget=None, **kwargs):
         hyperparameters = self.params.copy()
         for param in self.params:
-            if param not in self._hyperameters:
+            if param not in self._hyperparameters:
                 del hyperparameters[param]
-        gb = GradientBoostingClassifier(**hyperparameters)
+        if self._task == "classification":
+            gb = GradientBoostingClassifier(**hyperparameters)
+        else:
+            gb = GradientBoostingRegressor(**hyperparameters)
         start_time = time.time()
         deadline = start_time + budget if budget else np.inf
         gb.fit(X_train, y_train)        

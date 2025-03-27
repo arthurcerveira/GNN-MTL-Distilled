@@ -5,11 +5,12 @@ from flaml import AutoML
 import pandas as pd
 import pickle
 import sys
+from pathlib import Path
 
 CUSTOM_ESTIMATORS = {
     'decision_tree': DecisionTreeEstimator,
     'svm': SvmEstimator,
-    'logistic_regression': LogisticRegressionEstimator,
+    # 'logistic_regression': LogisticRegressionEstimator,
     'gradient_boosting': GradientBoostingEstimator
 }
 
@@ -60,9 +61,13 @@ def main():
         model_history=arguments.model_history
     )
 
-def train(input_train, output, estimators=['rf'], threads=1, time_budget=None, max_iter=None, metric=None, eval_method='auto', retrain_full=False, model_history=False):
-
-    df_train = pd.read_csv(input_train)
+def train(input_train, output, task="classification", estimators=['rf'], threads=1, time_budget=None, max_iter=None, metric=None, eval_method='auto', retrain_full=False, model_history=False):
+    if type(input_train) in [str, Path]:
+        df_train = pd.read_csv(input_train)
+    elif type(input_train) == pd.DataFrame:
+        df_train = input_train
+    else:
+        raise ValueError("input_train must be a path to a CSV file or a pandas DataFrame")
 
     X_train = df_train.drop(['activity'], axis=1)
     y_train = df_train['activity']
@@ -74,7 +79,7 @@ def train(input_train, output, estimators=['rf'], threads=1, time_budget=None, m
 
     automl.fit(
         X_train, y_train, 
-        task="classification", 
+        task=task, 
         estimator_list=estimators, 
         n_jobs=threads, 
         time_budget=time_budget, 

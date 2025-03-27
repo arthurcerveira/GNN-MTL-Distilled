@@ -1,7 +1,7 @@
 from bambu.logo import logo
 from bambu.preprocess.preprocessors.descriptors import DescriptorsPreprocessor
 from bambu.preprocess.preprocessors.morgan import MorganPreprocessor
-from bambu.preprocess.preprocessors.mol2vec import Mol2VecPreprocessor
+# from bambu.preprocess.preprocessors.mol2vec import Mol2VecPreprocessor
 from rdkit import Chem
 from pathlib import Path
 from rdkit.Chem import AllChem
@@ -66,9 +66,13 @@ def main():
     )
 
 def preprocess(input_file, output_file, output_preprocessor_file, feature_type, train_test_split_percent=None, undersample=False, descriptors=None, mol2vec_model_path=''):
+    if type(input_file) == str or type(input_file) == Path:
+        df_input = pd.read_csv(input_file)
+    elif type(input_file) == pd.DataFrame: 
+        df_input = input_file
+    else:
+        raise ValueError("input_file must be a path to a CSV file or a pandas DataFrame")
 
-    df_input = pd.read_csv(input_file)
-    
     X = df_input.drop(['activity'], axis=1)
     y = df_input['activity']
 
@@ -85,17 +89,17 @@ def preprocess(input_file, output_file, output_preprocessor_file, feature_type, 
     elif feature_type == "descriptors":
         preprocessor = DescriptorsPreprocessor()
 
-    elif feature_type == "mol2vec":
-        if mol2vec_model_path is None:
-            raise Exception("The path to a pretrained model must be passed when using mol2vec features")
-        if not os.path.isfile(mol2vec_model_path):
-            raise Exception(f"The path '{mol2vec_model_path}' is not a valid mol2vec model")
-        preprocessor = Mol2VecPreprocessor(pretrained_model=mol2vec_model_path)
+    # elif feature_type == "mol2vec":
+    #     if mol2vec_model_path is None:
+    #         raise Exception("The path to a pretrained model must be passed when using mol2vec features")
+    #     if not os.path.isfile(mol2vec_model_path):
+    #         raise Exception(f"The path '{mol2vec_model_path}' is not a valid mol2vec model")
+    #     preprocessor = Mol2VecPreprocessor(pretrained_model=mol2vec_model_path)
     
+    df_output = pd.DataFrame(columns=[*preprocessor.features, 'activity'])
     for r, row in tqdm(df_input.iterrows(), total=df_input.shape[0]):
     
         mol = Chem.inchi.MolFromInchi(row.InChI)
-
         try:
             mol_features = preprocessor.compute_features(mol)
             mol_features['activity'] = 1 if row.activity == "active" else 0
@@ -103,12 +107,17 @@ def preprocess(input_file, output_file, output_preprocessor_file, feature_type, 
             continue
         
         df_features = pd.DataFrame([mol_features], columns=[*preprocessor.features, 'activity'])
-        df_features.to_csv(
-            output_file, 
-            index=False, 
-            mode='w' if r == 0 else 'a',
-            header=True if r == 0 else False
-        )
+        
+        if output_file is not None:
+            df_features.to_csv(
+                output_file, 
+                index=False, 
+                mode='w' if r == 0 else 'a',
+                header=True if r == 0 else False
+            )
+        else:
+            df_output = pd.concat([df_output, df_features], ignore_index=True)
+
 
     with open(output_preprocessor_file, 'wb') as preprocessor_writer:
         preprocessor_writer.write(pickle.dumps(preprocessor, protocol=pickle.HIGHEST_PROTOCOL))
@@ -134,6 +143,9 @@ def preprocess(input_file, output_file, output_preprocessor_file, feature_type, 
         df_output_test['activity'] = y_test
         df_output_test = clean_dataset(df_output_test)
         df_output_test.to_csv(test_filepath, index=False)
+    
+    if output_file is None:
+        return df_output
 
 def clean_dataset(df):
     df       = df.astype(np.float32, errors = 'ignore')

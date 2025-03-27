@@ -1,13 +1,12 @@
-import os
 from pathlib import Path
 import json
+import sys
 
-chemprop_path = Path("..") / "chemprop"
-os.chdir(chemprop_path)
+chemprop_path = Path(__file__).parent / '..' / "baselines" / "chemprop"
+sys.path.append(str(chemprop_path))
 
 import numpy as np
 from lightning import pytorch as pl
-import pandas as pd
 import torch
 import torch.nn.functional as F
 from torch import Tensor

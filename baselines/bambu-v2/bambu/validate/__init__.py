@@ -1,6 +1,6 @@
 from bambu.logo import logo
 from argparse import ArgumentParser
-from sklearn.metrics import SCORERS
+from sklearn.metrics import get_scorer
 import numpy as np
 import scipy
 import pandas as pd
@@ -49,7 +49,7 @@ def validate_model(model, X_train, y_train, X_test, y_test, metrics=["accuracy",
 
     for metric in metrics:
         
-        scorer = SCORERS.get(metric)
+        scorer = get_scorer(metric)
         model_validation_data["raw_scores"][metric]  = [scorer(model, X_test, y_test)]
 
     for _ in tqdm.tqdm(range(randomizations)):
@@ -59,7 +59,7 @@ def validate_model(model, X_train, y_train, X_test, y_test, metrics=["accuracy",
         model.fit(X_train, y_train_scrambled)
 
         for metric in metrics:
-            scorer = SCORERS.get(metric)
+            scorer = get_scorer(metric)
             model_validation_data["raw_scores"][metric].append(scorer(model, X_test, y_test))
 
     model_validation_data["zscores"] = {}
@@ -73,4 +73,3 @@ def validate_model(model, X_train, y_train, X_test, y_test, metrics=["accuracy",
         model_validation_data["pvalues"][metric] = list(model_validation_data["pvalues"][metric])
 
     return model_validation_data
-
