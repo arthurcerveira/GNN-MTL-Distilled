@@ -6,7 +6,10 @@ import numpy as np
 import pandas as pd
 
 from chemprop_callback import (
-    chemprop_single_target_callback, chemprop_multi_target_callback, MaskedMSE
+    chemprop_single_target_callback, 
+    chemprop_multi_target_callback, 
+    chemprop_clustered_multi_target_callback,
+    MaskedMSE,
 )
 from bambu_callback import bambu_callback
 
@@ -21,9 +24,10 @@ DATA_PATH = Path(__file__).parent / ".." / "data"
 
 # Callbacks: Callable[[pd.DataFrame, List[str], bool], Dict[str, np.ndarray]]
 callbacks = {
+    f"{DATASET}-Clustered-MT-Chemprop": chemprop_clustered_multi_target_callback,
     f"{DATASET}-ST-Chemprop": chemprop_single_target_callback,
     f"{DATASET}-MT-Chemprop": chemprop_multi_target_callback,
-    f"{DATASET}-Bambu": bambu_callback
+    f"{DATASET}-Bambu": bambu_callback,
 }
 
 

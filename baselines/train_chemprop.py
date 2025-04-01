@@ -1,9 +1,11 @@
 import os
 from pathlib import Path
 import json
+import sys
 
-chemprop_path = Path(__file__).resolve().parent / "chemprop"
-os.chdir(chemprop_path)
+current_file_dir = Path(__file__).resolve().parent
+chemprop_path = current_file_dir / "chemprop"
+sys.path.append(str(chemprop_path))
 
 import numpy as np
 from lightning import pytorch as pl
@@ -18,11 +20,21 @@ from chemprop import data, featurizers, models, nn, conf
 
 
 TRAIN_TARGET_SPECIFIC = False
-TRAIN_ALL_MULTI_TARGET = True
+TRAIN_ALL_MULTI_TARGET = False
+TRAIN_CLUSTERED_MULTI_TARGET = True
 RETRAIN = True
 
+checkpoints_dir = current_file_dir / ".." / "checkpoints"
+results_dir = current_file_dir / ".." / "results"
+data_dir = current_file_dir / ".." / "data"
+
+target_clusters = None
+if TRAIN_CLUSTERED_MULTI_TARGET:
+    with open(data_dir / "target_clusters_correlation.json", "r") as f:
+        target_clusters = json.load(f)
+
 # Reference: https://chemprop.readthedocs.io/en/latest/training.html
-input_path = "../data/pivoted_pXC50_over_1000_split.csv" # path to your data .csv file
+input_path = data_dir / "pivoted_pXC50_over_1000_split.csv" # path to your data .csv file
 activities_df = pd.read_csv(input_path)
 num_workers = 0 # number of workers for dataloader. 0 means using main process for data loading
 smiles_column = 'SMILES' # name of the column containing SMILES strings
@@ -77,9 +89,8 @@ class MaskedMSE(nn.metrics.ChempropMetric):
 def data_pre_processing(activity_df, targets_columns, smiles_column, num_workers):
     df_input = activities_df[[smiles_column] + targets_columns + ["split"]].copy()
     
-    # Drop rows with missing values in target-specific optimization
-    if len(targets_columns) == 1:
-        df_input = df_input.dropna()
+    # Drop rows with missing values in all targets columns
+    df_input = df_input.dropna(subset=targets_columns, how="all")
     
     smis = df_input.loc[:, smiles_column].values
     ys = df_input.loc[:, targets_columns].values
@@ -121,7 +132,7 @@ def data_pre_processing(activity_df, targets_columns, smiles_column, num_workers
 def train_single_target(target, t_idx):
     print(f"({t_idx}/{total_targets}) Training model for {target}")
 
-    if not RETRAIN and os.path.exists(f"../checkpoints/target-specific/{target}/last.ckpt"):
+    if not RETRAIN and os.path.exists(checkpoints_dir / "target-specific" / target / "last.ckpt"):
         print(f"Model for {target} already trained. Skipping...")
         return
 
@@ -140,7 +151,7 @@ def train_single_target(target, t_idx):
 
     # Configure model checkpointing
     checkpointing = ModelCheckpoint(
-        f"../checkpoints/target-specific/{target}",  # Directory where model checkpoints will be saved
+        checkpoints_dir / "target-specific" / target,  # Directory where model checkpoints will be saved
         "best-{epoch}-{val_loss:.2f}",  # Filename format for checkpoints, including epoch and validation loss
         "val_loss",  # Metric used to select the best checkpoint (based on validation loss)
         mode="min",  # Save the checkpoint with the lowest validation loss (minimization objective)
@@ -164,7 +175,7 @@ def train_single_target(target, t_idx):
 
 
 def train_multi_target(targets):
-    if not RETRAIN and os.path.exists(f"../checkpoints/target-specific/MT-ALL/last.ckpt"):
+    if not RETRAIN and os.path.exists(checkpoints_dir / "target-specific" / "MT-ALL" / "last.ckpt"):
         print(f"Multi-target model already trained. Skipping...")
         return
 
@@ -180,8 +191,6 @@ def train_multi_target(targets):
     ffn = nn.RegressionFFN(
         output_transform=output_transform, n_tasks=len(targets), criterion=MaskedMSE()
     )
-    # ffn._T_default_criterion = MaskedMSE()
-    # ffn._T_default_metric = MaskedMSE()
 
     batch_norm = True
     metric_list = [MaskedMSE()]  # Only the first metric is used for training and early stopping
@@ -189,7 +198,7 @@ def train_multi_target(targets):
 
     # Configure model checkpointing
     checkpointing = ModelCheckpoint(
-        f"../checkpoints/multi-target/MT-ALL",  # Directory where model checkpoints will be saved
+        checkpoints_dir / "multi-target" / "MT-ALL",  # Directory where model checkpoints will be saved
         "best-{epoch}-{val_loss:.2f}",  # Filename format for checkpoints, including epoch and validation loss
         "val_loss",  # Metric used to select the best checkpoint (based on validation loss)
         mode="min",  # Save the checkpoint with the lowest validation loss (minimization objective)
@@ -212,8 +221,57 @@ def train_multi_target(targets):
 
     # Save index-to-target mapping to checkpoint directory for later use
     index_to_target = {i: target for i, target in enumerate(targets)}
-    with open(f"../checkpoints/multi-target/MT-ALL/index_to_target.json", "w") as f:
+    with open(checkpoints_dir / "multi-target" / "MT-ALL" / "index_to_target.json", "w") as f:
         json.dump(index_to_target, f, indent=4, ensure_ascii=False)
+
+    return results
+
+
+def train_clustered_multi_target(clustered_targets, cluster_idx):
+    print(f"Training clustered multi-target model for {len(clustered_targets)} targets (cluster {cluster_idx})")
+
+    if not RETRAIN and os.path.exists(checkpoints_dir / "clustered-multi-target" / f"cluster-{cluster_idx}" / "last.ckpt"):
+        print(f"Clustered multi-target model for cluster {cluster_idx} already trained. Skipping...")
+        return
+
+    train_loader, val_loader, test_loader, scaler = data_pre_processing(
+        activities_df, clustered_targets, smiles_column, num_workers
+    )
+    
+    mp = nn.BondMessagePassing()
+    agg = nn.MeanAggregation()
+    output_transform = nn.UnscaleTransform.from_standard_scaler(scaler)
+
+    ffn = nn.RegressionFFN(
+        output_transform=output_transform, n_tasks=len(clustered_targets), criterion=MaskedMSE()
+    )
+    
+    batch_norm = True
+    metric_list = [MaskedMSE()]  # Only the first metric is used for training and early stopping
+    mpnn = models.MPNN(mp, agg, ffn, batch_norm, metric_list)
+
+    # Configure model checkpointing
+    checkpointing = ModelCheckpoint(
+        checkpoints_dir / "clustered-multi-target" / f"cluster-{cluster_idx}",  # Directory where model checkpoints will be saved
+        "best-{epoch}-{val_loss:.2f}",  # Filename format for checkpoints, including epoch and validation loss
+        "val_loss",  # Metric used to select the best checkpoint (based on validation loss)
+        mode="min",  # Save the checkpoint with the lowest validation loss (minimization objective)
+        save_last=True,  # Always save the most recent checkpoint, even if it's not the best
+        enable_version_counter=False
+    )
+
+    trainer = pl.Trainer(
+        logger=False,
+        enable_checkpointing=True, # Use `True` if you want to save model checkpoints. The checkpoints will be saved in the `checkpoints` folder.
+        enable_progress_bar=True,
+        accelerator="auto",
+        devices=1,
+        max_epochs=20, # number of epochs to train for
+        callbacks=[checkpointing], # Use the configured checkpoint callback
+    )
+
+    trainer.fit(mpnn, train_loader, val_loader)
+    results = trainer.test(dataloaders=test_loader)
 
     return results
 
@@ -228,15 +286,31 @@ if __name__ == "__main__":
             all_results[target] = results
 
         print("Training complete.")
-        with open("../results/target-specific/chemprop-train.json", "w") as f:
+        with open(results_dir / "target-specific" / "chemprop-train.json", "w") as f:
             json.dump(all_results, f, indent=4, ensure_ascii=False)
         print("Results saved.")
-    
+
     if TRAIN_ALL_MULTI_TARGET:
         print("Training model for all targets simultaneously")
         results = train_multi_target(targets)
         
         print("Training complete.")
-        with open("../results/multi-target/chemprop-train.json", "w") as f:
+        with open(results_dir / "multi-target" / "chemprop-train.json", "w") as f:
             json.dump(results, f, indent=4, ensure_ascii=False)
+        print("Results saved.")
+
+    if TRAIN_CLUSTERED_MULTI_TARGET:
+        print("Training model for clustered multi-targets")
+        all_results = dict()
+        cluster_to_targets = target_clusters["cluster_to_targets"]
+
+        for cluster_idx in cluster_to_targets:
+            clustered_targets = cluster_to_targets[cluster_idx]
+            results = train_clustered_multi_target(clustered_targets, cluster_idx)
+            all_results[cluster_idx] = results
+        
+        print("Training complete.")
+        (results_dir / "clustered-multi-target").mkdir(parents=True, exist_ok=True)
+        with open(results_dir / "clustered-multi-target" / "chemprop-train.json", "w") as f:
+            json.dump(all_results, f, indent=4, ensure_ascii=False)
         print("Results saved.")
