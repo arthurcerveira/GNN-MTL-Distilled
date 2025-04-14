@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-
+from functools import partial
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import numpy as np
 import pandas as pd
@@ -14,19 +14,41 @@ from chemprop_callback import (
 from bambu_callback import bambu_callback
 
 DATASETS = {
-    "TVT-Split": "pivoted_pXC50_over_1000_split.csv",
-    "Lo-Split": "lo_pivoted_pXC50_over_1000_split_5000_clusters.csv",
-    "Hi-Split": "hi_pivot_pXC50_over_1000.csv"
+    "TVT": "pivoted_pXC50_over_1000_split.csv",
+    "Lo": "pivoted_pXC50_over_1000_split_lo.csv",
+    # "Hi": "hi_pivot_pXC50_over_1000.csv"
 }
-DATASET = "Lo-Split"
+DATASET = "Lo"
 DATA_PATH = Path(__file__).parent / ".." / "data"
+RESULTS_PATH = Path(__file__).parent / ".." / "results"
+
+
+# KD: Knowledge Distillation
+def knowledge_distillation(callback):
+    def wrapper(*args, **kwargs):
+        # Find trained_on key in kwargs
+        trained_on = kwargs.get("trained_on")
+        if trained_on is None:
+            raise ValueError("trained_on key not found in kwargs")
+
+        # Replace trained_on with trained_on-KD
+        kwargs["trained_on"] = kwargs["trained_on"] + "-KD"
+        return callback(*args, **kwargs)
+
+    return wrapper
+
+
+chemprop_clustered_multi_target_callback_kd = knowledge_distillation(chemprop_clustered_multi_target_callback)
+chemprop_multi_target_callback_kd = knowledge_distillation(chemprop_multi_target_callback)
 
 
 # Callbacks: Callable[[pd.DataFrame, List[str], bool], Dict[str, np.ndarray]]
 callbacks = {
     f"{DATASET}-Clustered-MT-Chemprop": chemprop_clustered_multi_target_callback,
+    f"{DATASET}-Clustered-MT-Chemprop-KD": chemprop_clustered_multi_target_callback_kd,
     f"{DATASET}-ST-Chemprop": chemprop_single_target_callback,
     f"{DATASET}-MT-Chemprop": chemprop_multi_target_callback,
+    f"{DATASET}-MT-Chemprop-KD": chemprop_multi_target_callback_kd,
     f"{DATASET}-Bambu": bambu_callback,
 }
 
@@ -50,7 +72,7 @@ if __name__ == "__main__":
 
     # Run the callbacks
     for label, callback in callbacks.items():
-        predictions = callback(test_dataset, targets, verbose=True)
+        predictions = callback(test_dataset, targets, trained_on=DATASET, verbose=True)
 
         # Compute metrics
         for target in targets:
@@ -84,10 +106,10 @@ if __name__ == "__main__":
             print(f"{metric}: {mean:.3f} ± {std:.3f}")
 
     # Save target and aggregated results
-    with open("../results/target_baseline_assessment.json", "w") as f:
+    with open(RESULTS_PATH / f"target_baseline_assessment_{DATASET}.json", "w") as f:
         json.dump(target_results, f, indent=4, ensure_ascii=False)
-    print("\nResults saved to target_baseline_assessment.json")
+    print(f"\nResults saved to target_baseline_assessment_{DATASET}.json")
 
-    with open("../results/aggregated_baseline_assessment.json", "w") as f:
+    with open(RESULTS_PATH / f"aggregated_baseline_assessment_{DATASET}.json", "w") as f:
         json.dump(aggregated_results, f, indent=4, ensure_ascii=False)
-    print("Results saved to aggregated_baseline_assessment.json")
+    print(f"Results saved to aggregated_baseline_assessment_{DATASET}.json")

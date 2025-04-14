@@ -17,8 +17,6 @@ from chemprop import data, featurizers, models, nn
 
 checkpoints_dir = current_dir / ".." / "checkpoints"
 data_dir = current_dir / ".." / "data"
-with open(data_dir / "target_clusters_correlation.json", "r") as f:
-    target_clusters = json.load(f)
 
 
 @nn.metrics.LossFunctionRegistry.register("masked_mse")
@@ -92,7 +90,7 @@ def run_mpnn_on_smiles(smiles_input, mpnn):
     return preds_tasks
 
 
-def chemprop_single_target_callback(test_dataset, targets, verbose=False, dropna=True):
+def chemprop_single_target_callback(test_dataset, targets, trained_on="TVT", verbose=False, dropna=True):
     target_predictions = dict()
 
     for target in targets:
@@ -104,7 +102,7 @@ def chemprop_single_target_callback(test_dataset, targets, verbose=False, dropna
         if verbose:
             print(f"Running ST-Chemprop on {len(smiles_input)} SMILES for target {target}...")
 
-        checkpoint_path = checkpoints_dir / "target-specific" / target / "last.ckpt"
+        checkpoint_path = checkpoints_dir / "target-specific" / trained_on / target / "last.ckpt"
         mpnn = models.MPNN.load_from_checkpoint(checkpoint_path)
         predictions = run_mpnn_on_smiles(smiles_input, mpnn)
         target_predictions[target] = predictions
@@ -112,16 +110,16 @@ def chemprop_single_target_callback(test_dataset, targets, verbose=False, dropna
     return target_predictions
 
 
-def chemprop_multi_target_callback(test_dataset, targets, verbose=False):
+def chemprop_multi_target_callback(test_dataset, targets, trained_on="TVT", verbose=False):
     if verbose:
         print(f"Running MT-Chemprop on {len(test_dataset)} SMILES for {len(targets)} targets...")
     
     target_predictions = dict()
-    with open(checkpoints_dir / "multi-target" / "MT-ALL" / "index_to_target.json", "r") as f:
+    with open(checkpoints_dir / "multi-target" / trained_on / "MT-ALL" / "index_to_target.json", "r") as f:
         index_to_target = json.load(f)
     
     smiles_input = test_dataset["SMILES"].tolist()
-    mpnn = models.MPNN.load_from_checkpoint(checkpoints_dir / "multi-target" / "MT-ALL" / "last.ckpt")
+    mpnn = models.MPNN.load_from_checkpoint(checkpoints_dir / "multi-target" / trained_on / "MT-ALL" / "last.ckpt")
     predictions = run_mpnn_on_smiles(smiles_input, mpnn)
 
     target_to_index = {v: k for k, v in index_to_target.items()}
@@ -133,20 +131,24 @@ def chemprop_multi_target_callback(test_dataset, targets, verbose=False):
     return target_predictions
 
 
-def chemprop_clustered_multi_target_callback(test_dataset, targets, verbose=False):
+def chemprop_clustered_multi_target_callback(test_dataset, targets, trained_on="TVT", verbose=False):
     target_predictions = dict()
+
+    label = trained_on.split('-')[0]
+    with open(data_dir / f"target_clusters_correlation_{label}.json", "r") as f:
+        target_clusters = json.load(f)
 
     for cluster_idx in target_clusters["cluster_to_targets"]:
         clustered_targets = target_clusters["cluster_to_targets"][cluster_idx]
 
-        checkpoint_path = checkpoints_dir / "clustered-multi-target" / f"cluster-{cluster_idx}" / "last.ckpt"
+        checkpoint_path = checkpoints_dir / "clustered-multi-target" / trained_on / f"cluster-{cluster_idx}" / "last.ckpt"
         mpnn = models.MPNN.load_from_checkpoint(checkpoint_path)
         
         target_dataset = test_dataset.dropna(subset=clustered_targets, how="all")
 
         if verbose:
             print(
-                f"Running clustered MT-Chemprop on {len(target_dataset)} SMILES"
+                f"Running clustered MT-Chemprop on {len(target_dataset)} SMILES "
                 f"for {len(clustered_targets)} targets (cluster {cluster_idx})..."
             )
 

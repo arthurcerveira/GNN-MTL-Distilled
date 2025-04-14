@@ -15,14 +15,25 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
+from multiprocessing import Pool
+from functools import partial
 
 from chemprop import data, featurizers, models, nn, conf
 
 
+DATASETS = {
+    "TVT": "pivoted_pXC50_over_1000_split.csv",
+    "TVT-KD": "pivoted_pXC50_over_1000_split_distilled.csv",
+    "Lo": "pivoted_pXC50_over_1000_split_lo.csv",
+    "Lo-KD": "pivoted_pXC50_over_1000_split_lo_distilled.csv",
+    # "Hi": "pivoted_pXC50_over_1000_split_hi.csv",
+}
+DATASET = "Lo-KD"
+
 TRAIN_TARGET_SPECIFIC = False
-TRAIN_ALL_MULTI_TARGET = False
+TRAIN_ALL_MULTI_TARGET = True
 TRAIN_CLUSTERED_MULTI_TARGET = True
-RETRAIN = True
+RETRAIN = False
 
 checkpoints_dir = current_file_dir / ".." / "checkpoints"
 results_dir = current_file_dir / ".." / "results"
@@ -30,17 +41,20 @@ data_dir = current_file_dir / ".." / "data"
 
 target_clusters = None
 if TRAIN_CLUSTERED_MULTI_TARGET:
-    with open(data_dir / "target_clusters_correlation.json", "r") as f:
+    label = DATASET.split('-')[0]
+    with open(data_dir / f"target_clusters_correlation_{label}.json", "r") as f:
         target_clusters = json.load(f)
 
 # Reference: https://chemprop.readthedocs.io/en/latest/training.html
-input_path = data_dir / "pivoted_pXC50_over_1000_split.csv" # path to your data .csv file
+input_path = data_dir / DATASETS[DATASET] # path to your data .csv file
 activities_df = pd.read_csv(input_path)
 num_workers = 0 # number of workers for dataloader. 0 means using main process for data loading
 smiles_column = 'SMILES' # name of the column containing SMILES strings
 targets = activities_df.columns
 # Remove columns SMILES and split from the list of targets
-targets = [target for target in targets if target not in [smiles_column, 'split']]
+targets = [
+    target for target in targets if target not in [smiles_column, 'split', 'cluster']
+]
 total_targets = len(targets)
 
 
@@ -108,19 +122,28 @@ def data_pre_processing(activity_df, targets_columns, smiles_column, num_workers
         np.array(np.where(splits == "test"))
     )
 
+    # If there is no validation set, set the last 10% of the training set as the validation set
+    if len(val_indices[0]) == 0:
+        val_size = int(len(train_indices[0]) * 0.1)
+        val_indices = np.array([train_indices[0][-val_size:]])
+        train_indices = np.array([train_indices[0][:-val_size]])
+
     train_data, val_data, test_data = data.split_data_by_indices(
         all_data, train_indices, val_indices, test_indices
     )
-
     featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
 
-    train_dset = data.MoleculeDataset(train_data[0], featurizer)
-    scaler = train_dset.normalize_targets()
+    try:
+        train_dset = data.MoleculeDataset(train_data[0], featurizer)
+        scaler = train_dset.normalize_targets()
 
-    val_dset = data.MoleculeDataset(val_data[0], featurizer)
-    val_dset.normalize_targets(scaler)
+        val_dset = data.MoleculeDataset(val_data[0], featurizer)
+        val_dset.normalize_targets(scaler)
 
-    test_dset = data.MoleculeDataset(test_data[0], featurizer)
+        test_dset = data.MoleculeDataset(test_data[0], featurizer)
+    except Exception as e:
+        print(f"Error normalizing targets: {e}")
+        breakpoint()
 
     train_loader = data.build_dataloader(train_dset, num_workers=num_workers)
     val_loader = data.build_dataloader(val_dset, num_workers=num_workers, shuffle=False)
@@ -131,8 +154,9 @@ def data_pre_processing(activity_df, targets_columns, smiles_column, num_workers
 
 def train_single_target(target, t_idx):
     print(f"({t_idx}/{total_targets}) Training model for {target}")
-
-    if not RETRAIN and os.path.exists(checkpoints_dir / "target-specific" / target / "last.ckpt"):
+    
+    checkpoint_path = checkpoints_dir / "target-specific" / DATASET / target
+    if not RETRAIN and os.path.exists(checkpoint_path / "last.ckpt"):
         print(f"Model for {target} already trained. Skipping...")
         return
 
@@ -151,7 +175,7 @@ def train_single_target(target, t_idx):
 
     # Configure model checkpointing
     checkpointing = ModelCheckpoint(
-        checkpoints_dir / "target-specific" / target,  # Directory where model checkpoints will be saved
+        checkpoint_path,  # Directory where model checkpoints will be saved
         "best-{epoch}-{val_loss:.2f}",  # Filename format for checkpoints, including epoch and validation loss
         "val_loss",  # Metric used to select the best checkpoint (based on validation loss)
         mode="min",  # Save the checkpoint with the lowest validation loss (minimization objective)
@@ -169,13 +193,15 @@ def train_single_target(target, t_idx):
         callbacks=[checkpointing], # Use the configured checkpoint callback
     )
 
+    print(f"Saving checkpoints to {checkpoint_path.resolve()}")
     trainer.fit(mpnn, train_loader, val_loader)
     results = trainer.test(dataloaders=test_loader)
     return results
 
 
 def train_multi_target(targets):
-    if not RETRAIN and os.path.exists(checkpoints_dir / "target-specific" / "MT-ALL" / "last.ckpt"):
+    checkpoint_path = checkpoints_dir / "multi-target" / DATASET / "MT-ALL"
+    if not RETRAIN and os.path.exists(checkpoint_path / "last.ckpt"):
         print(f"Multi-target model already trained. Skipping...")
         return
 
@@ -198,7 +224,7 @@ def train_multi_target(targets):
 
     # Configure model checkpointing
     checkpointing = ModelCheckpoint(
-        checkpoints_dir / "multi-target" / "MT-ALL",  # Directory where model checkpoints will be saved
+        checkpoint_path,  # Directory where model checkpoints will be saved
         "best-{epoch}-{val_loss:.2f}",  # Filename format for checkpoints, including epoch and validation loss
         "val_loss",  # Metric used to select the best checkpoint (based on validation loss)
         mode="min",  # Save the checkpoint with the lowest validation loss (minimization objective)
@@ -221,7 +247,7 @@ def train_multi_target(targets):
 
     # Save index-to-target mapping to checkpoint directory for later use
     index_to_target = {i: target for i, target in enumerate(targets)}
-    with open(checkpoints_dir / "multi-target" / "MT-ALL" / "index_to_target.json", "w") as f:
+    with open(checkpoint_path / "index_to_target.json", "w") as f:
         json.dump(index_to_target, f, indent=4, ensure_ascii=False)
 
     return results
@@ -230,7 +256,8 @@ def train_multi_target(targets):
 def train_clustered_multi_target(clustered_targets, cluster_idx):
     print(f"Training clustered multi-target model for {len(clustered_targets)} targets (cluster {cluster_idx})")
 
-    if not RETRAIN and os.path.exists(checkpoints_dir / "clustered-multi-target" / f"cluster-{cluster_idx}" / "last.ckpt"):
+    checkpoint_path = checkpoints_dir / "clustered-multi-target" / DATASET / f"cluster-{cluster_idx}"
+    if not RETRAIN and os.path.exists(checkpoint_path / "last.ckpt"):
         print(f"Clustered multi-target model for cluster {cluster_idx} already trained. Skipping...")
         return
 
@@ -252,7 +279,7 @@ def train_clustered_multi_target(clustered_targets, cluster_idx):
 
     # Configure model checkpointing
     checkpointing = ModelCheckpoint(
-        checkpoints_dir / "clustered-multi-target" / f"cluster-{cluster_idx}",  # Directory where model checkpoints will be saved
+        checkpoint_path,  # Directory where model checkpoints will be saved
         "best-{epoch}-{val_loss:.2f}",  # Filename format for checkpoints, including epoch and validation loss
         "val_loss",  # Metric used to select the best checkpoint (based on validation loss)
         mode="min",  # Save the checkpoint with the lowest validation loss (minimization objective)
@@ -278,6 +305,9 @@ def train_clustered_multi_target(clustered_targets, cluster_idx):
 
 if __name__ == "__main__":
     if TRAIN_TARGET_SPECIFIC:
+        checkpoint_path = checkpoints_dir / "target-specific" / DATASET
+        checkpoint_path.mkdir(parents=True, exist_ok=True)
+
         print("Training target-specific models.")
         all_results = dict()
 
@@ -286,31 +316,54 @@ if __name__ == "__main__":
             all_results[target] = results
 
         print("Training complete.")
-        with open(results_dir / "target-specific" / "chemprop-train.json", "w") as f:
+        results_path = results_dir / "target-specific" / "chemprop-train.json"
+        results_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(results_path, "w") as f:
             json.dump(all_results, f, indent=4, ensure_ascii=False)
         print("Results saved.")
 
     if TRAIN_ALL_MULTI_TARGET:
+        checkpoint_path = checkpoints_dir / "multi-target" / DATASET / "MT-ALL"
+        checkpoint_path.mkdir(parents=True, exist_ok=True)
+
         print("Training model for all targets simultaneously")
         results = train_multi_target(targets)
-        
+
         print("Training complete.")
-        with open(results_dir / "multi-target" / "chemprop-train.json", "w") as f:
+        results_path = results_dir / "multi-target" / "chemprop-train.json"
+        results_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(results_path, "w") as f:
             json.dump(results, f, indent=4, ensure_ascii=False)
         print("Results saved.")
 
     if TRAIN_CLUSTERED_MULTI_TARGET:
         print("Training model for clustered multi-targets")
+        checkpoint_path = checkpoints_dir / "clustered-multi-target" / DATASET
+        checkpoint_path.mkdir(parents=True, exist_ok=True)
+
         all_results = dict()
         cluster_to_targets = target_clusters["cluster_to_targets"]
 
-        for cluster_idx in cluster_to_targets:
+        def train_cluster(cluster_idx, cluster_to_targets):
             clustered_targets = cluster_to_targets[cluster_idx]
             results = train_clustered_multi_target(clustered_targets, cluster_idx)
-            all_results[cluster_idx] = results
-        
+            return cluster_idx, results
+
+        with Pool(processes=4) as pool:
+            train_fn = partial(train_cluster, cluster_to_targets=cluster_to_targets)
+            for cluster_idx, results in pool.imap_unordered(train_fn, cluster_to_targets.keys()):
+                all_results[cluster_idx] = results
+
+        # for cluster_idx in cluster_to_targets.keys():
+        #     clustered_targets = cluster_to_targets[cluster_idx]
+        #     results = train_clustered_multi_target(clustered_targets, cluster_idx)
+        #     all_results[cluster_idx] = results
+
         print("Training complete.")
-        (results_dir / "clustered-multi-target").mkdir(parents=True, exist_ok=True)
-        with open(results_dir / "clustered-multi-target" / "chemprop-train.json", "w") as f:
+
+        results_path = results_dir / "clustered-multi-target" / "chemprop-train.json"
+        results_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(results_path, "w") as f:
             json.dump(all_results, f, indent=4, ensure_ascii=False)
         print("Results saved.")
