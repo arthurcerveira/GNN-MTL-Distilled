@@ -16,9 +16,9 @@ from bambu_callback import bambu_callback
 DATASETS = {
     "TVT": "pivoted_pXC50_over_1000_split.csv",
     "Lo": "pivoted_pXC50_over_1000_split_lo.csv",
-    # "Hi": "hi_pivot_pXC50_over_1000.csv"
+    "Hi": "pivoted_pXC50_over_1000_split_hi.csv"
 }
-DATASET = "Lo"
+DATASET = "Hi"
 DATA_PATH = Path(__file__).parent / ".." / "data"
 RESULTS_PATH = Path(__file__).parent / ".." / "results"
 

@@ -26,14 +26,15 @@ DATASETS = {
     "TVT-KD": "pivoted_pXC50_over_1000_split_distilled.csv",
     "Lo": "pivoted_pXC50_over_1000_split_lo.csv",
     "Lo-KD": "pivoted_pXC50_over_1000_split_lo_distilled.csv",
-    # "Hi": "pivoted_pXC50_over_1000_split_hi.csv",
+    "Hi": "pivoted_pXC50_over_1000_split_hi.csv",
+    "Hi-KD": "pivoted_pXC50_over_1000_split_hi_distilled.csv",
 }
-DATASET = "Lo-KD"
+DATASET = "Hi"
 
 TRAIN_TARGET_SPECIFIC = False
-TRAIN_ALL_MULTI_TARGET = True
+TRAIN_ALL_MULTI_TARGET = False
 TRAIN_CLUSTERED_MULTI_TARGET = True
-RETRAIN = False
+RETRAIN = True
 
 checkpoints_dir = current_file_dir / ".." / "checkpoints"
 results_dir = current_file_dir / ".." / "results"
@@ -145,9 +146,9 @@ def data_pre_processing(activity_df, targets_columns, smiles_column, num_workers
         print(f"Error normalizing targets: {e}")
         breakpoint()
 
-    train_loader = data.build_dataloader(train_dset, num_workers=num_workers)
-    val_loader = data.build_dataloader(val_dset, num_workers=num_workers, shuffle=False)
-    test_loader = data.build_dataloader(test_dset, num_workers=num_workers, shuffle=False)
+    train_loader = data.build_dataloader(train_dset, num_workers=num_workers, batch_size=1024)
+    val_loader = data.build_dataloader(val_dset, num_workers=num_workers, shuffle=False, batch_size=1024)
+    test_loader = data.build_dataloader(test_dset, num_workers=num_workers, shuffle=False, batch_size=1024)
 
     return train_loader, val_loader, test_loader, scaler
 
@@ -349,7 +350,7 @@ if __name__ == "__main__":
             results = train_clustered_multi_target(clustered_targets, cluster_idx)
             return cluster_idx, results
 
-        with Pool(processes=4) as pool:
+        with Pool(processes=3) as pool:
             train_fn = partial(train_cluster, cluster_to_targets=cluster_to_targets)
             for cluster_idx, results in pool.imap_unordered(train_fn, cluster_to_targets.keys()):
                 all_results[cluster_idx] = results

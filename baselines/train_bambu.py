@@ -28,7 +28,7 @@ DATASETS = {
     "Lo": "pivoted_pXC50_over_1000_split_lo.csv",
     "Hi": "pivoted_pXC50_over_1000_split_hi.csv",
 }
-DATASET = "Lo"
+DATASET = "Hi"
 RETRAIN = False
 
 checkpoints_dir = current_file_dir / ".." / "checkpoints"
@@ -45,6 +45,9 @@ activities_df["InChI"] = activities_df["SMILES"].parallel_apply(lambda x: Chem.M
 
 ESTIMATORS = ["decision_tree", "gradient_boosting", "svm", 'rf', 'extra_tree']
 targets = activities_df.drop(columns=['SMILES', 'InChI', 'split']).columns.tolist()
+# Remove 'cluster' from targets if it exists
+if 'cluster' in targets:
+    targets.remove('cluster')
 
 
 def train_model(target):

@@ -66,7 +66,7 @@ def run_mpnn_on_smiles(smiles_input, mpnn):
 
     featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
     test_dset = data.MoleculeDataset(test_data, featurizer=featurizer)
-    test_loader = data.build_dataloader(test_dset, shuffle=False, num_workers=4)
+    test_loader = data.build_dataloader(test_dset, shuffle=False, num_workers=4, batch_size=4096)
 
     with torch.inference_mode():
         trainer = pl.Trainer(
