@@ -1,0 +1,27 @@
+SEADATA:
+  TRAIN_INPUT: "../../data/train_ecfp.npy"
+  TRAIN_LABEL: "../../data/train_labels.npy"
+  VAL_INPUT: "../../data/val_ecfp.npy"
+  VAL_LABEL: "../../data/val_labels.npy"
+  TEST_INPUT: "../../data/test_ecfp.npy"
+  TEST_LABEL: "../../data/test_labels.npy"
+  CLUSTER: "../../data/cluster_d50_dict.pickle"
+
+HYPERPARAMETERS:
+  batch_size: 256
+  epochs: 50
+  learning_rate: 0.001
+  hidden1_dim: 1024
+  hidden2_dim: 128
+  drop_rate: 0.5
+  patience: 5
+  input_dim: 2048
+  output_dim: 2
+
+TRAINING:
+  gpu: 0
+  seed: 0
+  distance: 430
+  cluster_first: null
+  cluster_last: null
+  cluster: null

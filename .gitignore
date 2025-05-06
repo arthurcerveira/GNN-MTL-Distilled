@@ -14,3 +14,9 @@ SEA/*
 *.pkl
 checkpoints/***/*.json
 lo_intermediate*
+log
+review
+*.npy
+*.pickle
+data/deprecated
+paper/

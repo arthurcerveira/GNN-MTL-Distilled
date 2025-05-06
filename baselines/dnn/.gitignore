@@ -1,0 +1,7 @@
+# ignore .ipynb_checkpoints/
+src/**/.ipynb_checkpoints/
+
+
+***/results/*
+***/log/*
+***/__pycache__/
