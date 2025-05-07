@@ -14,6 +14,11 @@ con.execute('SELECT * FROM excape LIMIT 10').fetchdf()
 # %%
 print(f'Number of rows: {con.execute("SELECT COUNT(*) FROM excape").fetchdf().values[0][0]:,}')
 
+unique_smiles = con.execute('SELECT DISTINCT SMILES FROM excape').fetchdf()
+
+print(f'Number of unique smiles: {unique_smiles.shape[0]:,}')
+print(unique_smiles.sample(5))
+
 unique_genes = con.execute('SELECT DISTINCT Gene_Symbol FROM excape').fetchdf()
 
 print(f'Number of unique genes: {unique_genes.shape[0]:,}')

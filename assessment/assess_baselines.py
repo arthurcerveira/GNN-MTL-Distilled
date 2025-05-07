@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 from functools import partial
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
@@ -12,13 +13,18 @@ from chemprop_callback import (
     MaskedMSE,
 )
 from bambu_callback import bambu_callback
+from dnn_callback import (
+    dnn_single_target_callback,
+    dnn_clustered_multi_target_callback,
+    # dnn_multi_target_callback,
+)
 
 DATASETS = {
     "TVT": "pivoted_pXC50_over_1000_split.csv",
     "Lo": "pivoted_pXC50_over_1000_split_lo.csv",
     "Hi": "pivoted_pXC50_over_1000_split_hi.csv"
 }
-DATASET = "Hi"
+DATASET = "TVT" if len(sys.argv) == 1 else sys.argv[1]
 DATA_PATH = Path(__file__).parent / ".." / "data"
 RESULTS_PATH = Path(__file__).parent / ".." / "results"
 
@@ -44,11 +50,14 @@ chemprop_multi_target_callback_kd = knowledge_distillation(chemprop_multi_target
 
 # Callbacks: Callable[[pd.DataFrame, List[str], bool], Dict[str, np.ndarray]]
 callbacks = {
-    f"{DATASET}-Clustered-MT-Chemprop": chemprop_clustered_multi_target_callback,
     f"{DATASET}-Clustered-MT-Chemprop-KD": chemprop_clustered_multi_target_callback_kd,
-    f"{DATASET}-ST-Chemprop": chemprop_single_target_callback,
-    f"{DATASET}-MT-Chemprop": chemprop_multi_target_callback,
+    f"{DATASET}-Clustered-MT-Chemprop": chemprop_clustered_multi_target_callback,
     f"{DATASET}-MT-Chemprop-KD": chemprop_multi_target_callback_kd,
+    f"{DATASET}-MT-Chemprop": chemprop_multi_target_callback,
+    f"{DATASET}-ST-Chemprop": chemprop_single_target_callback,
+    f"{DATASET}-Clustered-MT-DNN": dnn_clustered_multi_target_callback,
+    # f"{DATASET}-MT-DNN": dnn_multi_target_callback,
+    f"{DATASET}-DNN": dnn_single_target_callback,
     f"{DATASET}-Bambu": bambu_callback,
 }
 
