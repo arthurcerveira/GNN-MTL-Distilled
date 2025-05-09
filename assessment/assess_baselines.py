@@ -50,11 +50,11 @@ chemprop_multi_target_callback_kd = knowledge_distillation(chemprop_multi_target
 
 # Callbacks: Callable[[pd.DataFrame, List[str], bool], Dict[str, np.ndarray]]
 callbacks = {
-    f"{DATASET}-Clustered-MT-Chemprop-KD": chemprop_clustered_multi_target_callback_kd,
-    f"{DATASET}-Clustered-MT-Chemprop": chemprop_clustered_multi_target_callback,
-    f"{DATASET}-MT-Chemprop-KD": chemprop_multi_target_callback_kd,
-    f"{DATASET}-MT-Chemprop": chemprop_multi_target_callback,
-    f"{DATASET}-ST-Chemprop": chemprop_single_target_callback,
+    # f"{DATASET}-Clustered-MT-Chemprop-KD": chemprop_clustered_multi_target_callback_kd,
+    # f"{DATASET}-Clustered-MT-Chemprop": chemprop_clustered_multi_target_callback,
+    # f"{DATASET}-MT-Chemprop-KD": chemprop_multi_target_callback_kd,
+    # f"{DATASET}-MT-Chemprop": chemprop_multi_target_callback,
+    # f"{DATASET}-ST-Chemprop": chemprop_single_target_callback,
     f"{DATASET}-Clustered-MT-DNN": dnn_clustered_multi_target_callback,
     # f"{DATASET}-MT-DNN": dnn_multi_target_callback,
     f"{DATASET}-DNN": dnn_single_target_callback,

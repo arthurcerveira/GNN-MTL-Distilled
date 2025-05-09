@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 from collections import namedtuple
-import pickle
+import json
 
 from sklearn.model_selection import train_test_split
 import pandas as pd
@@ -26,13 +26,14 @@ DATASETS = {
     "Lo": "pivoted_pXC50_over_1000_split_lo.csv",
     "Lo-KD": "pivoted_pXC50_over_1000_split_lo_distilled.csv",
     "Hi": "pivoted_pXC50_over_1000_split_hi.csv",
+    "Hi-KD": "pivoted_pXC50_over_1000_split_hi_distilled.csv",
 }
-DATASET = sys.argv[1] if len(sys.argv) > 1 else "TVT"
+DATASET = "TVT" if len(sys.argv) == 1 else sys.argv[1]
 
 TRAIN_TARGET_SPECIFIC = False
-TRAIN_ALL_MULTI_TARGET = False
+TRAIN_ALL_MULTI_TARGET = True
 TRAIN_CLUSTERED_MULTI_TARGET = True
-RETRAIN = False
+RETRAIN = True
 
 DATA_PATH = current_dir / ".." / "data"
 CHECKPOINTS_PATH = current_dir / ".." / "checkpoints" / "dnn"
@@ -90,17 +91,27 @@ def train_clustered_multi_target(args, datasets):
     checkpoints_path.mkdir(parents=True, exist_ok=True)
     args.checkpoint = str(checkpoints_path)
 
-    cluster_tasks_json = DATA_PATH / f"target_clusters_correlation_{DATASET}.json"
-    args.cluster_tasks_json = cluster_tasks_json
+    label = DATASET.split("-")[0]
+    cluster_tasks_json = DATA_PATH / f"target_clusters_correlation_{label}.json"
+    with open(cluster_tasks_json, 'r') as f:
+        cluster_to_targets = json.load(f)['cluster_to_targets']
+
+    args.cluster_to_targets = cluster_to_targets
     mt_main(args, datasets, RETRAIN)
 
 
-def train_multi_target(dataset):
+def train_multi_target(args, datasets):
     if VERBOSE:
         print(f"Training multi-target model for {DATASET} dataset")
     checkpoints_path = CHECKPOINTS_PATH / "multi-target" / DATASET
     checkpoints_path.mkdir(parents=True, exist_ok=True)
     args.checkpoint = str(checkpoints_path)
+
+    # Train MT model for all targets simultaneously
+    *_, targets = datasets
+    args.cluster_to_targets = {
+        "MT-ALL": list(targets),
+    }
 
     mt_main(args, datasets, RETRAIN)
 
@@ -141,8 +152,8 @@ if __name__ == "__main__":
 
     if TRAIN_TARGET_SPECIFIC:
         train_single_target(args, datasets)
-    # elif TRAIN_ALL_MULTI_TARGET:
-    #     train_multi_target(train_fps, train_labels)
+    elif TRAIN_ALL_MULTI_TARGET:
+        train_multi_target(args, datasets)
     elif TRAIN_CLUSTERED_MULTI_TARGET:
         train_clustered_multi_target(args, datasets)
 

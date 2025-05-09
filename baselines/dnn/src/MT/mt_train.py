@@ -134,8 +134,9 @@ def main(args, datasets, retrain=True):
     # with open(config['SEADATA']['CLUSTER'], 'rb') as f:
     #     cluster_tasks = pickle.load(f)
     
-    with open(args.cluster_tasks_json, 'r') as f:
-        cluster_to_targets = json.load(f)['cluster_to_targets']
+    # with open(args.cluster_tasks_json, 'r') as f:
+    #     cluster_to_targets = json.load(f)['cluster_to_targets']
+    cluster_to_targets = args.cluster_to_targets
 
     # hyperparameters
     hypers = {
@@ -184,7 +185,6 @@ def main(args, datasets, retrain=True):
         dirs = {
             'cluster_dir': cluster_dir,
         }
-
         
         # set the cluster specific log file
         # logfname = os.path.join(logdir, f'MT.c{clstr:0>3}.train.log')

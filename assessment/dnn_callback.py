@@ -19,6 +19,7 @@ checkpoints_dir = current_dir / '..' / "checkpoints" / "dnn"
 data_dir = current_dir / '..' / "data"
 
 from ST import net
+from MT import net_mt
 
 
 def get_fingerprints(smiles, verbose=True):
@@ -77,7 +78,7 @@ def dnn_single_target_callback(test_dataset, targets, trained_on="TVT", verbose=
         model.eval()
 
         # Only predict for rows where the target is not NaN
-        target_mask = test_dataset[target].notna()
+        target_mask = test_dataset[target].notna().values
         fingerprints_masked = fingerprints_tensor[target_mask]
 
         # Predict
@@ -85,11 +86,7 @@ def dnn_single_target_callback(test_dataset, targets, trained_on="TVT", verbose=
             outputs = model(fingerprints_masked)
             target_predictions = outputs.squeeze().cpu().numpy()
 
-        # Fill predictions into a full array (NaN where target is missing)
-        full_predictions = np.full(len(test_dataset), np.nan)
-        full_predictions[target_mask] = target_predictions
-
-        predictions_dict[target] = full_predictions
+        predictions_dict[target] = target_predictions
 
     return predictions_dict
 
@@ -130,8 +127,10 @@ def dnn_clustered_multi_target_callback(test_dataset, targets, trained_on="TVT",
     for cluster_idx in target_clusters["cluster_to_targets"]:
         clustered_targets = target_clusters["cluster_to_targets"][cluster_idx]
 
+        kwargs["num_tasks"] = len(clustered_targets)
+
         # Load the model for this cluster
-        model = net.Net(**kwargs)
+        model = net_mt.Net(**kwargs)
         checkpoint_path = (
             checkpoints_dir / "clustered-multi-target" / trained_on / f"cluster-{cluster_idx}" / "weights.pt"
         )
@@ -140,7 +139,7 @@ def dnn_clustered_multi_target_callback(test_dataset, targets, trained_on="TVT",
             map_location=torch.device('cuda'),
             weights_only=False
         ))
-        model.eval()
+        model.to("cuda").eval()
 
         # Only predict for rows where at least one target in the cluster is not NaN
         target_dataset = test_dataset.dropna(subset=clustered_targets, how="all")
@@ -157,12 +156,14 @@ def dnn_clustered_multi_target_callback(test_dataset, targets, trained_on="TVT",
 
         # Predict
         with torch.no_grad():
-            outputs = model(fingerprints_masked)
-            cluster_predictions = outputs.squeeze().cpu().numpy()
+            predictions = []
+            for task_idx in range(kwargs["num_tasks"]):
+                outputs = model(fingerprints_masked, task_idx)
+                predictions.append(outputs.squeeze().cpu().numpy())
 
         # Store predictions for each target in the cluster
-        for target in clustered_targets:
+        for preds, target in zip(predictions, clustered_targets):
             target_specific_mask = target_dataset[target].notna()
-            target_predictions[target] = cluster_predictions[target_specific_mask]
+            target_predictions[target] = preds[target_specific_mask]
 
     return target_predictions

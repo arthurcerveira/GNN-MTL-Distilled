@@ -29,11 +29,11 @@ DATASETS = {
     "Hi": "pivoted_pXC50_over_1000_split_hi.csv",
     "Hi-KD": "pivoted_pXC50_over_1000_split_hi_distilled.csv",
 }
-DATASET = "Hi"
+DATASET = "TVT" if len(sys.argv) == 1 else sys.argv[1]
 
 TRAIN_TARGET_SPECIFIC = False
-TRAIN_ALL_MULTI_TARGET = False
-TRAIN_CLUSTERED_MULTI_TARGET = True
+TRAIN_ALL_MULTI_TARGET = True
+TRAIN_CLUSTERED_MULTI_TARGET = False
 RETRAIN = True
 
 checkpoints_dir = current_file_dir / ".." / "checkpoints"

@@ -28,7 +28,7 @@ DATASETS = {
     "Lo": "pivoted_pXC50_over_1000_split_lo.csv",
     "Hi": "pivoted_pXC50_over_1000_split_hi.csv",
 }
-DATASET = "Hi"
+DATASET = "TVT" if len(sys.argv) == 1 else sys.argv[1]
 RETRAIN = False
 
 checkpoints_dir = current_file_dir / ".." / "checkpoints"
