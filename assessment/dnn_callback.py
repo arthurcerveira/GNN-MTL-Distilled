@@ -167,3 +167,74 @@ def dnn_clustered_multi_target_callback(test_dataset, targets, trained_on="TVT",
             target_predictions[target] = preds[target_specific_mask]
 
     return target_predictions
+
+
+def dnn_multi_target_callback(test_dataset, targets, trained_on="TVT", verbose=False):
+    """
+    Predicts values for multiple targets using clustered DNN models.
+
+    Args:
+        test_dataset (pd.DataFrame): DataFrame with at least 'SMILES' and the target columns.
+        targets (list of str): List of target column names.
+        trained_on (str): Dataset/model name for checkpoint path.
+        verbose (bool): Whether to show progress bars.
+
+    Returns:
+        dict: {target: np.ndarray of predictions (NaN for missing target values)}
+    """
+    # Model architecture parameters (should match training)
+    kwargs = {
+        "input_dim": 2048,
+        "hidden1_dim": 1024,
+        "hidden2_dim": 128,
+        "output_dim": 1,
+        "drop_rate": 0.5
+    }
+
+    target_predictions = dict()
+
+    # Precompute fingerprints for all molecules once
+    smiles = test_dataset['SMILES'].values
+    fingerprints = get_fingerprints(smiles, verbose=verbose)
+    fingerprints_tensor = torch.tensor(fingerprints, dtype=torch.float32).to('cuda')
+
+    kwargs["num_tasks"] = len(targets)
+
+    # Load the model for this cluster
+    model = net_mt.Net(**kwargs)
+    checkpoint_path = (
+        checkpoints_dir / "multi-target" / trained_on / "cluster-MT-ALL" / "weights.pt"
+    )
+    model.load_state_dict(torch.load(
+        checkpoint_path,
+        map_location=torch.device('cuda'),
+        weights_only=False
+    ))
+    model.to("cuda").eval()
+
+    # Only predict for rows where at least one target in the cluster is not NaN
+    target_dataset = test_dataset.dropna(subset=targets, how="all")
+
+    if verbose:
+        print(
+            f"Running clustered MT-DNN on {len(target_dataset)} SMILES "
+            f"for {len(targets)} targets (cluster MT-ALL)..."
+        )
+
+    # Get fingerprints for the filtered dataset
+    target_mask = test_dataset.index.isin(target_dataset.index)
+    fingerprints_masked = fingerprints_tensor[target_mask]
+
+    # Predict
+    with torch.no_grad():
+        predictions = []
+        for task_idx in range(kwargs["num_tasks"]):
+            outputs = model(fingerprints_masked, task_idx)
+            predictions.append(outputs.squeeze().cpu().numpy())
+
+    # Store predictions for each target in the cluster
+    for preds, target in zip(predictions, targets):
+        target_specific_mask = target_dataset[target].notna()
+        target_predictions[target] = preds[target_specific_mask]
+
+    return target_predictions

@@ -31,9 +31,9 @@ DATASETS = {
 DATASET = "TVT" if len(sys.argv) == 1 else sys.argv[1]
 
 TRAIN_TARGET_SPECIFIC = False
-TRAIN_ALL_MULTI_TARGET = True
+TRAIN_ALL_MULTI_TARGET = False
 TRAIN_CLUSTERED_MULTI_TARGET = True
-RETRAIN = True
+RETRAIN = False
 
 DATA_PATH = current_dir / ".." / "data"
 CHECKPOINTS_PATH = current_dir / ".." / "checkpoints" / "dnn"

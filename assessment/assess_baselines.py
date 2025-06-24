@@ -1,7 +1,6 @@
 import json
 import sys
 from pathlib import Path
-from functools import partial
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import numpy as np
 import pandas as pd
@@ -16,7 +15,7 @@ from bambu_callback import bambu_callback
 from dnn_callback import (
     dnn_single_target_callback,
     dnn_clustered_multi_target_callback,
-    # dnn_multi_target_callback,
+    dnn_multi_target_callback,
 )
 
 DATASETS = {
@@ -47,16 +46,20 @@ def knowledge_distillation(callback):
 chemprop_clustered_multi_target_callback_kd = knowledge_distillation(chemprop_clustered_multi_target_callback)
 chemprop_multi_target_callback_kd = knowledge_distillation(chemprop_multi_target_callback)
 
+dnn_clustered_multi_target_callback_kd = knowledge_distillation(dnn_clustered_multi_target_callback)
+dnn_multi_target_callback_kd = knowledge_distillation(dnn_multi_target_callback)
 
 # Callbacks: Callable[[pd.DataFrame, List[str], bool], Dict[str, np.ndarray]]
 callbacks = {
-    # f"{DATASET}-Clustered-MT-Chemprop-KD": chemprop_clustered_multi_target_callback_kd,
-    # f"{DATASET}-Clustered-MT-Chemprop": chemprop_clustered_multi_target_callback,
-    # f"{DATASET}-MT-Chemprop-KD": chemprop_multi_target_callback_kd,
-    # f"{DATASET}-MT-Chemprop": chemprop_multi_target_callback,
-    # f"{DATASET}-ST-Chemprop": chemprop_single_target_callback,
+    f"{DATASET}-Clustered-MT-Chemprop-KD": chemprop_clustered_multi_target_callback_kd,
+    f"{DATASET}-Clustered-MT-Chemprop": chemprop_clustered_multi_target_callback,
+    f"{DATASET}-MT-Chemprop-KD": chemprop_multi_target_callback_kd,
+    f"{DATASET}-MT-Chemprop": chemprop_multi_target_callback,
+    f"{DATASET}-ST-Chemprop": chemprop_single_target_callback,
+    f"{DATASET}-Clustered-MT-DNN-KD": dnn_clustered_multi_target_callback_kd,
     f"{DATASET}-Clustered-MT-DNN": dnn_clustered_multi_target_callback,
-    # f"{DATASET}-MT-DNN": dnn_multi_target_callback,
+    f"{DATASET}-MT-DNN-KD": dnn_multi_target_callback_kd,
+    f"{DATASET}-MT-DNN": dnn_multi_target_callback,
     f"{DATASET}-DNN": dnn_single_target_callback,
     f"{DATASET}-Bambu": bambu_callback,
 }
@@ -81,6 +84,7 @@ if __name__ == "__main__":
 
     # Run the callbacks
     for label, callback in callbacks.items():
+        print(f"Running {label} on {DATASET}...")
         predictions = callback(test_dataset, targets, trained_on=DATASET, verbose=True)
 
         # Compute metrics
