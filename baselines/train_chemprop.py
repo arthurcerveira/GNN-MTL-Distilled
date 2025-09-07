@@ -31,9 +31,9 @@ DATASETS = {
 }
 DATASET = "TVT" if len(sys.argv) == 1 else sys.argv[1]
 
-TRAIN_TARGET_SPECIFIC = False
+TRAIN_TARGET_SPECIFIC = True
 TRAIN_ALL_MULTI_TARGET = True
-TRAIN_CLUSTERED_MULTI_TARGET = False
+TRAIN_CLUSTERED_MULTI_TARGET = True
 RETRAIN = True
 
 checkpoints_dir = current_file_dir / ".." / "checkpoints"
