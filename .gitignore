@@ -20,3 +20,5 @@ review
 *.pickle
 data/deprecated
 paper/
+data/*.csv
+data/*.zip

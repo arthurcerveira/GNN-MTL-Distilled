@@ -4,7 +4,7 @@
 # %%
 import duckdb
 
-excape_path = './data/Full-ExCAPE.tsv'
+excape_path = './Full-ExCAPE.tsv'
 
 con = duckdb.connect(database=':memory:', read_only=False)
 con.execute(f'CREATE TABLE excape AS SELECT * FROM read_csv_auto(\'{excape_path}\')')
@@ -64,7 +64,7 @@ for gene in tqdm(unique_genes["Gene_Symbol"]):
     pXC50_activity_dataset = pd.concat([pXC50_activity_dataset, assay_pXC50], ignore_index=True)
     idx += 1
 
-pXC50_activity_dataset.to_csv(f"./data/pXC50_activity_dataset_over_{min_assays_threshold}.csv", index=False)
+pXC50_activity_dataset.to_csv(f"./pXC50_activity_dataset_over_{min_assays_threshold}.csv", index=False)
 print(f"Number of genes with at least {min_assays_threshold} assays: {idx:,}")
 print(f"Number of assays: {len(pXC50_activity_dataset):,}")
 print(f"Number of unique SMILES: {pXC50_activity_dataset['SMILES'].nunique():,}")

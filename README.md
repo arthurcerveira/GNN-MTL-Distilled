@@ -1,6 +1,6 @@
 # Multitask-learning and Knowledge Distillation for Graph Neural Networks
 
-This repository contains the code and data for the paper "Enhancing Graph Neural Networks for Multi-Target Activity Prediction Through Multi-Task Learning and Knowledge Distillation".
+This repository contains the code and data for the paper "[Enhancing Graph Neural Networks for Multi-Target Activity Prediction Through Multi-Task Learning and Knowledge Distillation](https://www.researchgate.net/publication/394967989)".
 
 <figure>
     <img src="figures/Proposed-MTL-Approach.svg" width="800">

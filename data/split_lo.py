@@ -1,20 +1,16 @@
 from pathlib import Path
 import pandas as pd
 import numpy as np
-import lohi_splitter as lohi
 from rdkit.Chem.rdFingerprintGenerator import GetMorganGenerator
 from rdkit import Chem, DataStructs
 from tqdm import tqdm
 from scipy.sparse import csr_matrix, save_npz, load_npz
 
 
-SPLIT_LO = True
-SPLIT_HI = False
-
 OVER_N = 1000
 
 pivoted_assays_split = pd.read_csv(
-    f"data/pivoted_pXC50_over_{OVER_N}_split.csv"
+    f"pivoted_pXC50_over_{OVER_N}_split.csv"
 ).drop(columns=["split"])  # .head(10_000)
 
 smiles = pivoted_assays_split["SMILES"].to_list()
@@ -140,36 +136,6 @@ def select_distinct_clusters(smiles, threshold, min_cluster_size, max_clusters, 
         similarity_matrix = similarity_matrix[np.ix_(keep_mask, keep_mask)]  # Update similarity matrix
         num_mols = len(smiles)
 
-        # Preview results
-        if len(clusters) % 10 == 0 and len(clusters) > 0:
-            train_smiles = list(smiles)
-            
-            # Move one molecule from each test cluster to the training set
-            leave_one_clusters = []
-            for cluster in clusters:
-                train_smiles.append(cluster[-1])
-                leave_one_clusters.append(cluster[:-1])
-
-            lo_split_assays = set_cluster_columns(pivoted_assays_split, leave_one_clusters, train_smiles, smiles_column="SMILES")
-
-            # cluster 0 means train
-            lo_split_assays["lo_split"] = lo_split_assays["cluster"].apply(lambda x: "train" if x == 0 else "test")
-            print(lo_split_assays.shape)
-            print(pd.DataFrame({
-                "#": lo_split_assays["lo_split"].value_counts().apply(lambda x: f"{x:,}"),
-                "%": lo_split_assays["lo_split"].value_counts(normalize=True).apply(lambda x: f"{x:.1%}")
-            }, index=["train", "test"]))
-
-            train = lo_split_assays[lo_split_assays["lo_split"] == "train"]
-            test = lo_split_assays[lo_split_assays["lo_split"] == "test"]
-            print("Minimum number of assays in each split:")
-            print(pd.Series({
-                "train": train.notnull().sum().min(),
-                "test": test.notnull().sum().min()
-            }))
-
-            lo_split_assays.to_csv(f"lo_intermediate/{len(clusters)}.csv", index=False)
-
     return clusters, smiles
 
 
@@ -239,64 +205,16 @@ def split_lo(smiles, values):
     return cluster_smiles, train_smiles
 
 
-def solve_linear_problem(m, max_mip_gap=0.1, verbose=True, **optimize_kwargs):
-    """
-    Solves MIP linear model with default parameters.
-    """
-    m.max_mip_gap = max_mip_gap
-    m.threads = -1
-    m.emphasis = 2
-    m.verbose = verbose
-    m.optimize(**optimize_kwargs)
-    return m
-
-
-def coarse_hi_split(smiles, threshold=0.4):
-    """
-    Reference: https://github.com/SteshinSS/lohi_splitter/blob/main/tutorial/01_hi_split_coarsening.ipynb
-    """
-    # Define a threshold for similarity. Molecules with similarity > 0.4 are considered similar.
-    similarity_threshold = 0.4
-
-    # Set fractions for the train and test sets.
-    # Increase their sum to discard fewer molecules. Decrease it to speed up computations.
-    train_min_frac = 0.70
-    test_min_frac = 0.10
-
-    # Threshold for graph clustering.
-    # Increase it to discard fewer molecules. Decrease it to speed up computations.
-    coarsening_threshold = 0.4
-
-    # How close we should be to the theoretical optimum to terminate the optimization.
-    # Should be in [0, 1].
-    # Decrease it to discard fewer molecules. Increase it to speed up computations.
-    max_mip_gap = 0.01
-
-    partition = lohi.hi_train_test_split(smiles=smiles,
-                                        similarity_threshold=similarity_threshold,
-                                        train_min_frac=train_min_frac,
-                                        test_min_frac=test_min_frac,
-                                        coarsening_threshold=coarsening_threshold,
-                                        max_mip_gap=max_mip_gap)
-
-
 if __name__ == "__main__":
-    if SPLIT_LO:
-        # Set all columns dtype to float
-        values = pivoted_assays_split.drop(columns="SMILES").astype(float).mean(axis=1, skipna=True).to_list()
+    # Set all columns dtype to float
+    values = pivoted_assays_split.drop(columns="SMILES").astype(float).mean(axis=1, skipna=True).to_list()
 
-        cluster_smiles, train_smiles = split_lo(smiles, values)
-        lo_split_assays = set_cluster_columns(pivoted_assays_split, cluster_smiles, train_smiles, smiles_column="SMILES")
+    cluster_smiles, train_smiles = split_lo(smiles, values)
+    lo_split_assays = set_cluster_columns(pivoted_assays_split, cluster_smiles, train_smiles, smiles_column="SMILES")
 
-        # cluster 0 means train
-        lo_split_assays["lo_split"] = lo_split_assays["cluster"].apply(lambda x: "train" if x == 0 else "test")
-        print(lo_split_assays.shape)
-        print(lo_split_assays["lo_split"].value_counts())
+    # cluster 0 means train
+    lo_split_assays["lo_split"] = lo_split_assays["cluster"].apply(lambda x: "train" if x == 0 else "test")
+    print(lo_split_assays.shape)
+    print(lo_split_assays["lo_split"].value_counts())
 
-        lo_split_assays.to_csv(f"data/lo_pivoted_pXC50_over_{OVER_N}_split.csv", index=False)
-
-    # if SPLIT_HI:
-    #     # Overwrite the lohi solve_linear_problem function to set optimization parameters
-    #     lohi.solve_linear_problem = solve_linear_problem
-    
-    #     coarse_hi_split(smiles, threshold=0.4)
+    lo_split_assays.to_csv(f"lo_pivoted_pXC50_over_{OVER_N}_split.csv", index=False)

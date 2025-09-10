@@ -64,7 +64,14 @@ def train_model(target):
     preprocessed_df["activity"] = df_input["activity"].reset_index(drop=True)
     
     print(f"Checkpoint path: {(checkpoints_path / f'{target}.pkl').resolve()}")
-    train(preprocessed_df, checkpoints_path / f"{target}.pkl", estimators=ESTIMATORS, task="regression")
+    train(
+        preprocessed_df, 
+        checkpoints_path / f"{target}.pkl", 
+        estimators=ESTIMATORS, 
+        task="regression",
+        time_budget=3600,
+        threads=6
+    )
 
 
 print("\nTotal targets:", len(targets))

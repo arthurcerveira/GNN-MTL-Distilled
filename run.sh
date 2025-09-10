@@ -9,6 +9,11 @@ datasets=("TVT" "Lo" "Hi" "TVT-KD" "Lo-KD" "Hi-KD")
 for dataset in "${datasets[@]}"; do
     python train_dnn.py "$dataset"
     python train_chemprop.py "$dataset"
+done
+
+# Bambu does not consider the distilled datasets
+datasets=("TVT" "Lo" "Hi")
+for dataset in "${datasets[@]}"; do
     python train_bambu.py "$dataset"
 done
 
